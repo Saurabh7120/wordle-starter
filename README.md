@@ -1,76 +1,59 @@
-# Wordle Full Stack Assessment
+# Wordle Club
 
-## Background
+A full-stack Wordle game with a FastAPI backend and a React frontend. Play as many games as you like, each with a word length of 5 to 8 letters.
 
-Wordle is a simple game in which you have to guess a five-letter word. You get six guesses, learning a little more information with each guess, and eventually narrow your guesses down to find the answer.
+## How to play
 
-You can play an online version of Wordle [here](https://www.nytimes.com/games/wordle/index.html).
+- Pick a word length from 5 to 8 and start a game. You get **one more guess than the word has letters**: a 5-letter word gives 6 guesses, a 7-letter word gives 8.
+- Type your guess with the keyboard or the on-screen keys, then press Enter. Every guess must be a real word.
+- After each guess, every letter is colored:
+  - **Green**: the letter is in the word and in the right place.
+  - **Yellow**: the letter is in the word but in a different place.
+  - **Gray**: the letter is not in the word.
+- A letter can appear more than once. If you guess two of the same letter, they are colored according to how many times the letter really appears in the answer.
+- Answers are never plural.
+- Win by guessing the word, and the board celebrates with confetti. Run out of guesses and the word is revealed.
+- Start new games at any time and switch between them in **Your games** (5 per page).
 
-## Rules
+## Features
 
-1. Letters that are in the answer and in the right place turn green.
-2. Letters that are in the answer but in the wrong place turn yellow.
-3. Letters that are not in the answer turn gray.
-4. Answers are never plural.
-5. Letters can appear more than once. So if your guess includes two of one letter, they may both turn yellow, both turn green, or one could be yellow and the other green.
-6. Each guess must be a valid word in Wordle's dictionary. You can't guess ABCDE, for instance.
-7. You do not have to include correct letters in subsequent guesses.
-8. You have six guesses to solve the Wordle.
+- Unlimited games, saved in a database, so you can leave and come back.
+- Word length from 5 to 8 letters, with length + 1 guesses.
+- Physical and on-screen keyboards, with keys colored by what you have learned.
+- Wrong guesses shake the row, and wins trigger confetti. Both respect the system "reduce motion" setting.
+- Light and dark themes, a mobile-friendly layout, and screen-reader labels.
+- Answers are common words chosen from a reviewed list. Guesses are checked against a much larger dictionary.
 
-## Goal
+## Tech stack
 
-Your goal is to design and build a full stack Wordle application with both a REST API backend and a React frontend.
+- **Backend:** Python, FastAPI, SQLite (standard library).
+- **Frontend:** React 19, Vite.
+- **Tests:** pytest (backend) and Vitest with Testing Library (frontend).
 
-In our version of Wordle, there are 2 key differences from the original:
+## Getting started
 
-1. **Multiple Games**: The user can create and play as many games as they want.
-2. **Configurable Word Length**: The user can configure the number of letters in the target word to be anywhere between 5 to 8 letters, but they will always only have N+1 turns to guess the word. For instance, traditional Wordle involves guessing a five-letter word over six turns, but in our version, the user can pick 7 as the number of letters and get 8 turns to guess the word.
+### Backend
 
-### Backend Requirements
+With Docker (hot reload on code and word-list changes):
 
-- Build a REST API that supports:
-  - Creating a new game (with configurable word length 5-8)
-  - Submitting guesses and receiving feedback (green/yellow/gray for each letter)
-  - Retrieving game state
-  - Validating that guesses are real words
-- Use appropriate data storage for game state
-
-### Frontend Requirements
-
-- Build a React UI that allows users to:
-  - Start a new game with a selected word length (5-8 letters)
-  - Enter guesses via an on-screen keyboard or physical keyboard
-  - See feedback for each guess (green/yellow/gray letters)
-  - View their guess history for the current game
-  - See when they've won or lost
-
-**Use of AI is allowed and encouraged for this assessment.**
-
----
-
-## Getting Started
-
-This repository includes boilerplate code to help you get started quickly.
-
-### Project Structure
-
+```bash
+docker compose up --build
 ```
-wordle-starter/
-├── frontend/           # React application (Vite)
-├── backend/            # FastAPI application
-│   ├── main.py         # routes
-│   ├── game.py         # game logic and SQLite storage
-│   ├── words/          # word lists
-│   ├── test_game.py
-│   ├── requirements.txt
-│   └── Dockerfile
-├── docker-compose.yml
-└── README.md
+
+Or without Docker:
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn main:app --reload --port 8000
 ```
+
+The API runs at `http://localhost:8000`, and interactive API docs are at `http://localhost:8000/docs`. Games are stored in `backend/data/wordle.db`, which is created on first run.
+
+To stop the Docker container: `docker compose down`.
 
 ### Frontend
-
-The frontend is a React application built with Vite. It is pre-configured with CORS support to communicate with the backend.
 
 ```bash
 cd frontend
@@ -78,61 +61,74 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173`.
+Open `http://localhost:5173`.
 
-**Key files:** `frontend/src/App.jsx` (main component), `frontend/src/api.js` (API client), `frontend/src/components/`, `frontend/src/App.css`.
-
-### Backend
-
-The backend is a FastAPI application with CORS already configured for the frontend. Run it using Docker Compose:
+### Tests
 
 ```bash
-docker compose up --build
+# backend
+cd backend && pip install -r requirements-dev.txt && pytest
+
+# frontend
+cd frontend && npm test
 ```
 
-This will build and start the backend container with hot-reloading enabled. The API will be available at `http://localhost:8000`.
+### Configuration
 
-To run in detached mode (background):
+| Variable | Where | Default | Purpose |
+|---|---|---|---|
+| `CORS_ORIGIN` | backend (docker compose passes it through) | `http://localhost:5173` | The one frontend origin the API allows. Never use `*`. |
+| `VITE_API_URL` | frontend | `http://localhost:8000` | Backend URL, e.g. `VITE_API_URL=http://localhost:9000 npm run dev`. |
 
-```bash
-docker compose up -d --build
+## Project structure
+
 ```
-
-To stop the container:
-
-```bash
-docker compose down
+.
+├── backend/
+│   ├── main.py            # routes
+│   ├── game.py            # scoring, game logic, SQLite storage
+│   ├── test_game.py       # tests
+│   ├── words/             # answer, guess and blocked word lists
+│   ├── requirements.txt
+│   ├── requirements-dev.txt
+│   └── Dockerfile
+├── frontend/
+│   └── src/
+│       ├── App.jsx        # main component
+│       ├── api.js         # API client
+│       └── components/    # board, keyboard, game list, help, confetti
+├── docker-compose.yml
+└── README.md
 ```
-
-API documentation is automatically available at `http://localhost:8000/docs`.
-
-**Key files:** `backend/main.py` (routes), `backend/game.py` (scoring and storage), `backend/test_game.py` (tests). Games are stored in SQLite at `backend/data/wordle.db`.
-
-### Development Workflow
-
-1. Start the backend with `docker compose up --build`
-2. Start the frontend with `cd frontend && npm install && npm run dev`
-3. Run the backend tests with `cd backend && pip install -r requirements-dev.txt && pytest`
-4. The frontend makes requests to `http://localhost:8000` (override with `VITE_API_URL`)
-
----
 
 ## API
-
-Backend: `docker compose up --build` (or `cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000`). Frontend: `cd frontend && npm install && npm run dev`. Backend tests: `cd backend && pip install -r requirements-dev.txt && pytest`. Optional env var `CORS_ORIGIN` (default `http://localhost:5173`) sets the allowed frontend origin (a single origin, never `*`; docker-compose passes it through).
-
-Frontend: optional env var `VITE_API_URL` (default `http://localhost:8000`) sets the backend URL, e.g. `VITE_API_URL=http://localhost:9000 npm run dev`.
 
 | Endpoint | Description | Errors |
 |---|---|---|
 | `POST /games` `{"length": 5-8}` | Create a game (`length + 1` guesses) | 422 bad length |
-| `GET /games?limit=5&offset=0` | Paginated list, newest first: `{"games": [...], "total": N}` (`limit` 1-50, default 5; `offset` >= 0) | 422 bad limit/offset |
-| `GET /games/{id}` | Game state; `word` is `null` until the game ends | 404 |
-| `POST /games/{id}/guesses` `{"guess": "..."}` | Submit a guess; returns the updated game with per-letter `green`/`yellow`/`gray` feedback | 404, 409 game finished, 422 wrong length / not a word |
+| `GET /games?limit=5&offset=0` | List games, newest first: `{"games": [...], "total": N}` (`limit` 1-50, default 5; `offset` 0 or more) | 422 bad limit/offset |
+| `GET /games/{id}` | Game state. `word` is `null` until the game ends | 404 |
+| `POST /games/{id}/guesses` `{"guess": "..."}` | Submit a guess. Returns the updated game with `green`/`yellow`/`gray` feedback for each letter | 404, 409 game finished, 422 wrong length or not a word |
+| `GET /health` | Health check | |
 
-### Word lists
+A game looks like this:
 
-- Answers come from `backend/words/answers{5-8}.txt`: 600 common words per length, built once from the Datamuse API with `cd backend && python words/build_answers.py /tmp/datamuse-raw` (never called at runtime).
-- `backend/words/blocked.txt` removes unsuitable words from the answers; they stay valid as guesses.
-- Valid guesses come from `backend/words/valid{5-8}.txt` (macOS `/usr/share/dict/web2`, filtered).
-- After editing the lists the dev container reloads automatically (`.txt` files included); otherwise restart the backend.
+```json
+{
+  "id": "…",
+  "length": 5,
+  "max_guesses": 6,
+  "status": "in_progress",
+  "guesses": [{ "word": "crane", "feedback": ["green", "gray", "gray", "yellow", "gray"] }],
+  "word": null
+}
+```
+
+`status` is `in_progress`, `won` or `lost`.
+
+## Word lists
+
+- **Answers:** `backend/words/answers{5-8}.txt` hold 600 common words per length. They were built once from the Datamuse API with `cd backend && python words/build_answers.py /tmp/datamuse-raw`. The API is never called while the app runs.
+- **Blocklist:** `backend/words/blocked.txt` removes unsuitable words from the answers. Those words are still valid as guesses.
+- **Valid guesses:** `backend/words/valid{5-8}.txt` (from `/usr/share/dict/web2`, filtered to lowercase letters).
+- After editing the lists, the Docker container reloads automatically (`.txt` files included). Without Docker, restart the backend.
