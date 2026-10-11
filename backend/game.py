@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 import random
 import sqlite3
 import uuid
@@ -17,8 +18,10 @@ def _words(kind: str, n: int) -> list[str]:
     return (HERE / "words" / f"{kind}{n}.txt").read_text().split()
 
 
-ANSWERS = {n: _words("answers", n) for n in range(5, 9)}
+BLOCKED = {l.strip() for l in (HERE / "words" / "blocked.txt").read_text().splitlines() if l.strip() and l[0] != "#"}
+ANSWERS = {n: [w for w in _words("answers", n) if w not in BLOCKED] for n in range(5, 9)}
 VALID = {n: set(_words("valid", n)) for n in range(5, 9)}
+assert all(ANSWERS.values()), "empty answer list"
 
 
 def score(guess: str, answer: str) -> list[str]:
@@ -37,15 +40,28 @@ def score(guess: str, answer: str) -> list[str]:
 
 
 def db() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(exist_ok=True)
     c = sqlite3.connect(DB_PATH)
     c.row_factory = sqlite3.Row
-    c.execute(
-        "CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, word TEXT NOT NULL, "
-        "length INTEGER NOT NULL, max_guesses INTEGER NOT NULL, status TEXT NOT NULL, "
-        "guesses_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
-    )
     return c
+
+
+def init_db() -> None:
+    DB_PATH.parent.mkdir(exist_ok=True)
+    with closing(db()) as c, c:
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, word TEXT NOT NULL, "
+            "length INTEGER NOT NULL, max_guesses INTEGER NOT NULL, status TEXT NOT NULL, "
+            "guesses_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS games_created ON games(created_at)")
+
+
+init_db()
+
+
+def tx():
+    # sqlite3's own `with` commits but never closes; closing() does the close
+    return closing(db())
 
 
 def _view(r: sqlite3.Row) -> dict:
@@ -62,7 +78,7 @@ def _view(r: sqlite3.Row) -> dict:
 
 def create_game(length: int) -> dict:
     gid = str(uuid.uuid4())
-    with db() as c:
+    with tx() as c, c:
         c.execute(
             "INSERT INTO games (id, word, length, max_guesses, status, guesses_json) "
             "VALUES (?, ?, ?, ?, 'in_progress', '[]')",
@@ -71,14 +87,18 @@ def create_game(length: int) -> dict:
         return _view(c.execute("SELECT * FROM games WHERE id = ?", (gid,)).fetchone())
 
 
-def list_games() -> list[dict]:
-    with db() as c:
+def list_games(limit: int, offset: int) -> dict:
+    with tx() as c, c:
         # rowid breaks created_at (1s resolution) ties
-        return [_view(r) for r in c.execute("SELECT * FROM games ORDER BY created_at DESC, rowid DESC")]
+        rows = c.execute(
+            "SELECT * FROM games ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?", (limit, offset)
+        )
+        games = [_view(r) for r in rows]
+        return {"games": games, "total": c.execute("SELECT COUNT(*) FROM games").fetchone()[0]}
 
 
 def get_game(gid: str) -> dict:
-    with db() as c:
+    with tx() as c, c:
         r = c.execute("SELECT * FROM games WHERE id = ?", (gid,)).fetchone()
     if not r:
         raise GameError(404, "Game not found")
@@ -87,7 +107,7 @@ def get_game(gid: str) -> dict:
 
 def make_guess(gid: str, guess: str) -> dict:
     guess = guess.strip().lower()
-    with db() as c:
+    with tx() as c, c:
         c.execute("BEGIN IMMEDIATE")  # serialize concurrent guesses on the same game
         r = c.execute("SELECT * FROM games WHERE id = ?", (gid,)).fetchone()
         if not r:

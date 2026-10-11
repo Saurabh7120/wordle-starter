@@ -1,4 +1,4 @@
-export default function Board({ game, current }) {
+export default function Board({ game, current, shake }) {
   const rows = Array.from({ length: game.max_guesses }, (_, r) => {
     const g = game.guesses[r]
     const word = g ? g.word : r === game.guesses.length ? current : ''
@@ -10,9 +10,10 @@ export default function Board({ game, current }) {
   return (
     <div className="board" style={{ '--cols': game.length }}>
       {rows.map((row, r) => (
-        <div className="row" key={r}>
+        <div className={`row ${shake?.row === r ? 'shake' : ''}`} key={shake?.row === r ? `${r}-${shake.n}` : r}>
           {row.map((t, c) => (
-            <div key={c} className={`tile ${t.state}`}>{t.letter}</div>
+            <div key={c} role="img" className={`tile ${t.state} ${t.letter ? 'filled' : ''}`}
+              aria-label={`Row ${r + 1}, letter ${c + 1}: ${t.letter || 'empty'}${t.state ? `, ${t.state}` : ''}`}>{t.letter}</div>
           ))}
         </div>
       ))}

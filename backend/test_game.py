@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,13 +10,14 @@ from main import app
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(game, "DB_PATH", tmp_path / "t.db")
+    game.init_db()
     return TestClient(app)
 
 
 def new(client, length=5, word=None):
     g = client.post("/games", json={"length": length}).json()
     if word:
-        with game.db() as c:
+        with game.tx() as c, c:
             c.execute("UPDATE games SET word = ? WHERE id = ?", (word, g["id"]))
     return g
 
@@ -85,9 +88,52 @@ def test_unknown_game_and_list_order(client):
     assert client.get("/games/nope").status_code == 404
     assert guess(client, "nope", "crane").status_code == 404
     a, b = new(client), new(client, 6)
-    assert [x["id"] for x in client.get("/games").json()] == [b["id"], a["id"]]
+    assert [x["id"] for x in client.get("/games").json()["games"]] == [b["id"], a["id"]]
 
 
 def test_answers_subset_of_valid():
     for n in range(5, 9):
         assert set(game.ANSWERS[n]) <= game.VALID[n]
+
+
+def test_list_pagination(client):
+    assert client.get("/games").json() == {"games": [], "total": 0}
+    made = [new(client)["id"] for _ in range(23)][::-1]  # newest first
+    j = client.get("/games").json()
+    assert len(j["games"]) == 5 and j["total"] == 23
+    got = []
+    for off in range(0, 25, 5):
+        got += [g["id"] for g in client.get("/games", params={"limit": 5, "offset": off}).json()["games"]]
+    assert got == made
+    assert client.get("/games", params={"limit": 50, "offset": 23}).json()["games"] == []
+
+
+@pytest.mark.parametrize("q", [{"limit": 0}, {"limit": 51}, {"offset": -1}, {"offset": 10**30}, {"limit": "x"}])
+def test_list_bad_params(client, q):
+    assert client.get("/games", params=q).status_code == 422
+
+
+def test_concurrent_guesses_both_saved(client):
+    g = new(client, 5, "crane")
+    codes = []
+    ts = [threading.Thread(target=lambda w=w: codes.append(guess(client, g["id"], w).status_code)) for w in ("about", "above")]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert codes == [200, 200]
+    assert len(client.get(f"/games/{g['id']}").json()["guesses"]) == 2
+
+
+def test_blocklist():
+    lines = [l for l in (game.HERE / "words" / "blocked.txt").read_text().splitlines() if l and l[0] != "#"]
+    assert len(lines) == len(set(lines)) and all(w.isascii() and w.isalpha() and w.islower() for w in lines)
+    assert set(lines) == game.BLOCKED
+    for n in range(5, 9):
+        assert not set(game.ANSWERS[n]) & game.BLOCKED
+        assert len(game.ANSWERS[n]) >= 400
+
+
+def test_blocked_word_still_guessable(client):
+    w = "kelly"
+    assert w in game.BLOCKED and w in game.VALID[5]
+    g = new(client, 5, "crane")
+    assert guess(client, g["id"], w).status_code == 200
