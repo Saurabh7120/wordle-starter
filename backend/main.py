@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+import os
+
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -9,16 +11,11 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[os.environ.get("CORS_ORIGIN", "http://localhost:5173")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.get("/")
-def read_root():
-    return {"message": "Hello World"}
 
 
 @app.get("/health")
@@ -47,8 +44,8 @@ def create_game(body: NewGame):
 
 
 @app.get("/games")
-def list_games():
-    return game.list_games()
+def list_games(limit: int = Query(5, ge=1, le=50), offset: int = Query(0, ge=0, le=2**31)):
+    return game.list_games(limit, offset)
 
 
 @app.get("/games/{game_id}")

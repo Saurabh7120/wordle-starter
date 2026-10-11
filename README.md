@@ -58,7 +58,10 @@ This repository includes boilerplate code to help you get started quickly.
 wordle-starter/
 ├── frontend/           # React application (Vite)
 ├── backend/            # FastAPI application
-│   ├── main.py
+│   ├── main.py         # routes
+│   ├── game.py         # game logic and SQLite storage
+│   ├── words/          # word lists
+│   ├── test_game.py
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── docker-compose.yml
@@ -77,10 +80,7 @@ npm run dev
 
 The frontend will be available at `http://localhost:5173`.
 
-**Key files to modify:**
-- `frontend/src/App.jsx` - Main application component, start building your UI here
-- `frontend/src/App.css` - Application styles
-- Add new components in `frontend/src/components/` as needed
+**Key files:** `frontend/src/App.jsx` (main component), `frontend/src/api.js` (API client), `frontend/src/components/`, `frontend/src/App.css`.
 
 ### Backend
 
@@ -106,27 +106,33 @@ docker compose down
 
 API documentation is automatically available at `http://localhost:8000/docs`.
 
-**Key files to modify:**
-- `backend/main.py` - Add your API endpoints here
-- `backend/requirements.txt` - Add any additional Python dependencies
+**Key files:** `backend/main.py` (routes), `backend/game.py` (scoring and storage), `backend/test_game.py` (tests). Games are stored in SQLite at `backend/data/wordle.db`.
 
 ### Development Workflow
 
 1. Start the backend with `docker compose up --build`
 2. Start the frontend with `cd frontend && npm install && npm run dev`
-3. Build your API endpoints in `backend/main.py`
-4. Build your UI in the `frontend/src/` directory
-5. The frontend is configured to make requests to `http://localhost:8000`
+3. Run the backend tests with `cd backend && pip install -r requirements-dev.txt && pytest`
+4. The frontend makes requests to `http://localhost:8000` (override with `VITE_API_URL`)
 
 ---
 
 ## API
 
-Backend: `docker compose up --build` (or `cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000`). Frontend: `cd frontend && npm install && npm run dev`. Backend tests: `cd backend && pytest`.
+Backend: `docker compose up --build` (or `cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000`). Frontend: `cd frontend && npm install && npm run dev`. Backend tests: `cd backend && pip install -r requirements-dev.txt && pytest`. Optional env var `CORS_ORIGIN` (default `http://localhost:5173`) sets the allowed frontend origin (a single origin, never `*`; docker-compose passes it through).
+
+Frontend: optional env var `VITE_API_URL` (default `http://localhost:8000`) sets the backend URL, e.g. `VITE_API_URL=http://localhost:9000 npm run dev`.
 
 | Endpoint | Description | Errors |
 |---|---|---|
 | `POST /games` `{"length": 5-8}` | Create a game (`length + 1` guesses) | 422 bad length |
-| `GET /games` | List games, newest first | |
+| `GET /games?limit=5&offset=0` | Paginated list, newest first: `{"games": [...], "total": N}` (`limit` 1-50, default 5; `offset` >= 0) | 422 bad limit/offset |
 | `GET /games/{id}` | Game state; `word` is `null` until the game ends | 404 |
 | `POST /games/{id}/guesses` `{"guess": "..."}` | Submit a guess; returns the updated game with per-letter `green`/`yellow`/`gray` feedback | 404, 409 game finished, 422 wrong length / not a word |
+
+### Word lists
+
+- Answers come from `backend/words/answers{5-8}.txt`: 600 common words per length, built once from the Datamuse API with `cd backend && python words/build_answers.py /tmp/datamuse-raw` (never called at runtime).
+- `backend/words/blocked.txt` removes unsuitable words from the answers; they stay valid as guesses.
+- Valid guesses come from `backend/words/valid{5-8}.txt` (macOS `/usr/share/dict/web2`, filtered).
+- After editing the lists the dev container reloads automatically (`.txt` files included); otherwise restart the backend.
