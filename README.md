@@ -118,3 +118,15 @@ API documentation is automatically available at `http://localhost:8000/docs`.
 4. Build your UI in the `frontend/src/` directory
 5. The frontend is configured to make requests to `http://localhost:8000`
 
+---
+
+## API
+
+Backend: `docker compose up --build` (or `cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000`). Frontend: `cd frontend && npm install && npm run dev`. Backend tests: `cd backend && pytest`.
+
+| Endpoint | Description | Errors |
+|---|---|---|
+| `POST /games` `{"length": 5-8}` | Create a game (`length + 1` guesses) | 422 bad length |
+| `GET /games` | List games, newest first | |
+| `GET /games/{id}` | Game state; `word` is `null` until the game ends | 404 |
+| `POST /games/{id}/guesses` `{"guess": "..."}` | Submit a guess; returns the updated game with per-letter `green`/`yellow`/`gray` feedback | 404, 409 game finished, 422 wrong length / not a word |
